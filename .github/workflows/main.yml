@@ -1,0 +1,396 @@
+name: Performance Testing
+
+on:
+  # 1. Manual trigger (via GitHub UI)
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Project name to test'
+        required: true
+        default: 'TrimbleAssistant_Incremental_Oct14'
+      test_type:
+        description: 'Test type (linear, constant, ramp, spike, custom)'
+        required: false
+        default: 'linear'
+        type: choice
+        options:
+          - linear
+          - constant
+          - ramp
+          - spike
+          - custom
+      regions:
+        description: 'AWS regions (comma-separated: us-east-1,us-west-2,eu-west-1)'
+        required: false
+        default: 'us-east-1,us-west-2'
+      auto_terminate:
+        description: 'Auto-terminate VMs after test'
+        required: false
+        default: true
+        type: boolean
+      duration:
+        description: 'Test duration in seconds'
+        required: false
+        default: '300'
+      users:
+        description: 'Number of concurrent users'
+        required: false
+        default: '100'
+
+  # 2. Reusable workflow trigger (from another YAML file)
+  workflow_call:
+    inputs:
+      project_name:
+        description: 'Project name to test'
+        required: true
+        type: string
+      test_type:
+        description: 'Test type (linear, constant, ramp, spike, custom)'
+        required: false
+        type: string
+        default: 'linear'
+      regions:
+        description: 'AWS regions (comma-separated: us-east-1,us-west-2,eu-west-1)'
+        required: false
+        type: string
+        default: 'us-east-1,us-west-2'
+      auto_terminate:
+        description: 'Auto-terminate VMs after test'
+        required: false
+        type: boolean
+        default: true
+      duration:
+        description: 'Test duration in seconds'
+        required: false
+        type: string
+        default: '300'
+      users:
+        description: 'Number of concurrent users'
+        required: false
+        type: string
+        default: '100'
+    secrets:
+      # Expose required secrets to the calling workflow
+      PERF_API_URL:
+        required: true
+      PERF_USERNAME:
+        required: true
+      PERF_PASSWORD:
+        required: true
+
+# --- Environment Variables ---
+# Note: The logic for setting environment variables remains the same,
+# relying on the inputs object regardless of the trigger type.
+env:
+  PERF_API_URL: ${{ secrets.PERF_API_URL }}
+  PERF_USERNAME: ${{ secrets.PERF_USERNAME }}
+  PERF_PASSWORD: ${{ secrets.PERF_PASSWORD }}
+  PROJECT_NAME: ${{ inputs.project_name || 'TrimbleAssistant_Incremental_Oct14' }}
+  TEST_TYPE: ${{ inputs.test_type || 'linear' }}
+  REGIONS: ${{ inputs.regions || 'us-east-1,us-west-2' }}
+  # Ensure boolean input conversion works correctly for auto_terminate
+  AUTO_TERMINATE: ${{ inputs.auto_terminate == false && 'false' || 'true' }}
+  DURATION: ${{ inputs.duration || '300' }}
+  USERS: ${{ inputs.users || '100' }}
+
+jobs:
+  performance-test:
+    runs-on: ubuntu-latest
+    
+    # Use secrets directly in job steps if not using the env block, but since
+    # you defined them in 'env', they will be available. We ensure secrets are
+    # passed to 'workflow_call' above.
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+        # Install jq for reliable JSON parsing
+        sudo apt-get install -y jq
+        
+    - name: Authenticate with Performance Testing API
+      id: auth
+      run: |
+        echo "🔐 Authenticating with Performance Testing API..."
+        # Login to get session cookie
+        curl -s -X POST "${PERF_API_URL}/v2/login" \
+          -H "Content-Type: application/json" \
+          -d "{\"username\":\"${PERF_USERNAME}\",\"password\":\"${PERF_PASSWORD}\"}" \
+          --cookie-jar cookies.txt \
+          --location > /dev/null
+        # Extract session cookie from Netscape cookie format
+        SESSION_COOKIE=$(awk '$6 == "session" {print "session=" $7}' cookies.txt | head -1)
+        if [ -z "$SESSION_COOKIE" ]; then
+          echo "❌ Authentication failed"
+          exit 1
+        fi
+        echo "session_cookie=$SESSION_COOKIE" >> $GITHUB_OUTPUT
+        echo "✅ Authentication successful"
+        
+    - name: Prepare test configuration
+      run: |
+        echo "⚙️  Preparing test configuration..."
+        # Parse regions and build configuration
+        IFS=',' read -ra REGION_ARRAY <<< "$REGIONS"
+        REGIONS_JSON="["
+        FIRST=true
+        for region in "${REGION_ARRAY[@]}"; do
+          if [ "$FIRST" = true ]; then
+            FIRST=false
+          else
+            REGIONS_JSON+=","
+          fi
+          REGIONS_JSON+="{\"region\":\"$region\",\"loadPercent\":$((100 / ${#REGION_ARRAY[@]}))}"
+        done
+        REGIONS_JSON+="]"
+        # Convert string boolean to JSON boolean
+        if [ "$AUTO_TERMINATE" = "true" ]; then
+          AUTO_TERMINATE_BOOL=true
+        else
+          AUTO_TERMINATE_BOOL=false
+        fi
+        # Export variables for next step
+        echo "REGIONS_JSON=$REGIONS_JSON" >> $GITHUB_ENV
+        echo "AUTO_TERMINATE_BOOL=$AUTO_TERMINATE_BOOL" >> $GITHUB_ENV
+        # Debug: Verify variables are set
+        echo "🔍 DEBUG: REGIONS_JSON set to: $REGIONS_JSON"
+        echo "🔍 DEBUG: AUTO_TERMINATE_BOOL set to: $AUTO_TERMINATE_BOOL"
+        echo "✅ Test configuration prepared"
+        
+    - name: Trigger Performance Test
+      id: trigger
+      run: |
+        echo "🚀 Triggering performance test..."
+        echo "Project: $PROJECT_NAME"
+        echo "Test Type: $TEST_TYPE"
+        echo "Regions: $REGIONS"
+        echo "Duration: $DURATION seconds"
+        echo "Users: $USERS"
+        echo "Auto-terminate: $AUTO_TERMINATE"
+        # Construct JSON payload inline
+        JSON_PAYLOAD="{\"testType\":\"$TEST_TYPE\",\"parameters\":{\"duration\":$DURATION,\"users\":$USERS,\"rampUp\":30,\"protocol\":\"https\"}}"
+        
+        # Debug: Show the JSON being sent
+        echo "🔍 DEBUG: Sending JSON payload: $JSON_PAYLOAD"
+        
+        # Validate JSON format
+        if echo "$JSON_PAYLOAD" | jq . >/dev/null 2>&1; then
+          echo "✅ JSON validation passed"
+        else
+          echo "❌ JSON validation failed"
+          echo "Invalid JSON: $JSON_PAYLOAD"
+          exit 1
+        fi
+        
+        # Trigger the test
+        RESPONSE=$(curl -s -X POST "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/execute-with-params" \
+          -H "Content-Type: application/json" \
+          -H "Cookie: ${{ steps.auth.outputs.session_cookie }}" \
+          -d "$JSON_PAYLOAD")
+        echo "🔍 Trigger Response: $RESPONSE"
+        
+        # Check if the API call was successful
+        API_SUCCESS=$(echo "$RESPONSE" | jq -r '.success' 2>/dev/null || echo "false")
+        ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error' 2>/dev/null || echo "")
+        
+        if [ "$API_SUCCESS" != "true" ]; then
+          echo "❌ Failed to trigger test execution"
+          echo "API Response: $RESPONSE"
+          if [ -n "$ERROR_MSG" ]; then
+            echo "Error: $ERROR_MSG"
+          fi
+          exit 1
+        fi
+        
+        # Extract test ID from successful response
+        TEST_ID=$(echo "$RESPONSE" | jq -r '.test_id' 2>/dev/null || echo "")
+        
+        if [ -z "$TEST_ID" ]; then
+          echo "❌ Test triggered but no test_id returned"
+          echo "Response: $RESPONSE"
+          exit 1
+        fi
+        echo "test_id=$TEST_ID" >> $GITHUB_OUTPUT
+        echo "✅ Test triggered successfully with ID: $TEST_ID"
+        
+    - name: Wait for Test Completion
+      id: wait
+      run: |
+        echo "⏳ Waiting for test completion..."
+        TEST_ID="${{ steps.trigger.outputs.test_id }}"
+        MAX_WAIT_TIME=3600  # 1 hour max
+        WAIT_TIME=0
+        SLEEP_INTERVAL=30
+        
+        while [ $WAIT_TIME -lt $MAX_WAIT_TIME ]; do
+          echo "Checking status... (${WAIT_TIME}s elapsed)"
+          # Check execution status (single-region uses project-based endpoint)
+          STATUS_RESPONSE=$(curl -s "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/execution-status" \
+            -H "Cookie: ${{ steps.auth.outputs.session_cookie }}")
+          echo "🔍 Raw Status Response: $STATUS_RESPONSE"
+          
+          # Check if test is completed
+          RUNNING=$(echo "$STATUS_RESPONSE" | jq -r '.running' 2>/dev/null || echo "")
+          SUCCESS=$(echo "$STATUS_RESPONSE" | jq -r '.success' 2>/dev/null || echo "")
+          
+          echo "Running: $RUNNING, Success: $SUCCESS"
+          
+          if [ "$RUNNING" = "false" ]; then
+            if [ "$SUCCESS" = "true" ]; then
+              echo "✅ Test completed successfully!"
+              echo "📄 Final Status Response: $STATUS_RESPONSE"
+              break
+            else
+              echo "❌ Test failed!"
+              echo "📄 Final Status Response: $STATUS_RESPONSE"
+              exit 1
+            fi
+          fi
+          
+          sleep $SLEEP_INTERVAL
+          WAIT_TIME=$((WAIT_TIME + SLEEP_INTERVAL))
+        done
+        
+        if [ $WAIT_TIME -ge $MAX_WAIT_TIME ]; then
+          echo "❌ Test timed out after ${MAX_WAIT_TIME} seconds"
+          echo "Last status check: $STATUS_RESPONSE"
+          exit 1
+        fi
+        
+    - name: Download Test Results
+      id: download
+      run: |
+        echo "📥 Downloading test results..."
+        TEST_ID="${{ steps.trigger.outputs.test_id }}"
+
+        # Create results directory
+        mkdir -p test-results
+
+        # Get list of available reports
+        echo "📋 Getting list of available reports..."
+        REPORTS_RESPONSE=$(curl -s "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/reports" \
+          -H "Cookie: ${{ steps.auth.outputs.session_cookie }}")
+
+        # Extract the latest report ID
+        LATEST_REPORT_ID=$(echo "$REPORTS_RESPONSE" | jq -r '.reports[0].report_id' 2>/dev/null || echo "")
+
+        if [ -z "$LATEST_REPORT_ID" ]; then
+          echo "❌ No reports found for project $PROJECT_NAME"
+          echo "# Performance Test Results" > test-results/summary.md
+          echo "**Status:** ❌ No reports found" >> test-results/summary.md
+          exit 0
+        fi
+
+        echo "📥 Downloading report: $LATEST_REPORT_ID"
+
+        # Download the report as zip
+        curl -s "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/report/${LATEST_REPORT_ID}/download" \
+          -H "Cookie: ${{ steps.auth.outputs.session_cookie }}" \
+          --output test-results/report.zip
+
+        if [ ! -f "test-results/report.zip" ]; then
+          echo "❌ Failed to download report zip file"
+          exit 1
+        fi
+
+        # Extract the zip file
+        echo "📦 Extracting report..."
+        cd test-results
+        unzip -q report.zip
+        rm report.zip
+
+        # Find the HTML report file
+        REPORT_HTML=$(find . -name "index.html" | head -1)
+
+        if [ -z "$REPORT_HTML" ]; then
+          echo "❌ Could not find index.html in extracted report"
+          exit 1
+        fi
+
+        echo "📊 Found report file: $REPORT_HTML"
+
+        # Create summary with key metrics
+        echo "# Performance Test Results" > summary.md
+        echo "" >> summary.md
+        echo "**Test ID:** $TEST_ID" >> summary.md
+        echo "**Project:** $PROJECT_NAME" >> summary.md
+        echo "**Test Type:** $TEST_TYPE" >> summary.md
+        echo "**Report ID:** $LATEST_REPORT_ID" >> summary.md
+        echo "**Status:** ✅ Completed" >> summary.md
+        echo "" >> summary.md
+
+        # Try to extract some basic metrics from the HTML
+        echo "## 📊 Key Metrics" >> summary.md
+        
+        # Look for common metrics
+        RESPONSE_TIME=$(grep -oP '(?<=Mean response time</td><td>)[^<]+' "$REPORT_HTML" 2>/dev/null || echo "N/A")
+        REQUESTS_PER_SEC=$(grep -oP '(?<=Requests/sec</td><td>)[^<]+' "$REPORT_HTML" 2>/dev/null || echo "N/A")
+        TOTAL_REQUESTS=$(grep -oP '(?<=Total</td><td>)[^<]+' "$REPORT_HTML" 2>/dev/null | head -1 || echo "N/A")
+
+        echo "**Total Requests:** $TOTAL_REQUESTS" >> summary.md
+        echo "**Requests/sec:** $REQUESTS_PER_SEC" >> summary.md
+        echo "**Mean Response Time:** $RESPONSE_TIME" >> summary.md
+        echo "" >> summary.md
+
+        echo "## 📁 Report Files" >> summary.md
+        echo "The complete Gatling HTML report is included in the artifacts." >> summary.md
+        
+        cd ..
+        echo "✅ Test results downloaded and processed"
+        
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-test-results-${{ steps.trigger.outputs.test_id }}
+        path: test-results/
+        retention-days: 30
+
+    - name: Generate Test Report Summary
+      run: |
+        echo "## 🚀 Performance Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Test ID:** ${{ steps.trigger.outputs.test_id }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Project:** $PROJECT_NAME" >> $GITHUB_STEP_SUMMARY
+        echo "**Configuration:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Test Type: $TEST_TYPE" >> $GITHUB_STEP_SUMMARY
+        echo "- Regions: $REGIONS" >> $GITHUB_STEP_SUMMARY
+        echo "- Duration: $DURATION seconds" >> $GITHUB_STEP_SUMMARY
+        echo "- Users: $USERS" >> $GITHUB_STEP_SUMMARY
+        echo "- Auto-terminate: $AUTO_TERMINATE" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Results" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Test completed successfully" >> $GITHUB_STEP_SUMMARY
+
+        # Try to extract and display key metrics
+        if [ -f "test-results/summary.md" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 📈 Key Metrics" >> $GITHUB_STEP_SUMMARY
+          # Extract metrics from the summary file
+          grep -E "\*\*Total Requests:\*\*|\*\*Requests/sec:\*\*|\*\*Mean Response Time:\*\*" test-results/summary.md >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Metrics extraction failed" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📁 Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "📥 [Download Test Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        echo "- Complete Gatling HTML report" >> $GITHUB_STEP_SUMMARY
+        echo "- Performance metrics and charts" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Cleanup on Failure
+      if: failure()
+      run: |
+        echo "🧹 Cleaning up after failure..."
+        # Add cleanup logic here if needed
+        echo "Cleanup completed"
+
+
+
+
