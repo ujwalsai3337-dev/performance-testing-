@@ -186,6 +186,7 @@ def main():
     my_lib.save_inventory("library_data.json")
 
     print("\n[FINISH] Program execution complete.")
+    print("just for chaging things ")
 
 if __name__ == "__main__":
     main()
