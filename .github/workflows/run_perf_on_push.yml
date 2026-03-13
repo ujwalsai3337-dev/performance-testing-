@@ -8,7 +8,7 @@ on:
 jobs:
   call-performance-test:
     # Points to your existing performance testing workflow file
-    uses: ./.github/workflows/main.yml@main
+    uses: ./.github/workflows/main.yml
     with:
       project_name: 'pt55'      # Project name from your manual run
       test_type: 'linear'       # Test profile type
