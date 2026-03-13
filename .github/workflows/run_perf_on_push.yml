@@ -3,15 +3,14 @@ name: Trigger Performance Test on Push
 on:
   push:
     branches:
-      - main  # Runs whenever code is pushed to the main branch
+      - [cite_start]main  # Runs whenever code is pushed to the main branch [cite: 20]
 
 jobs:
   call-performance-test:
-    # Points to your existing performance testing workflow file
-    # Ensure the filename matches exactly: performance_testing.yml
+    # Points to your existing performance testing workflow file [cite: 30]
     uses: ./.github/workflows/main.yml@main
     with:
-      [cite_start]project_name: 'pt55'      # Project name from your documentation [cite: 32]
+      [cite_start]project_name: 'pt55'      # Project name [cite: 32]
       [cite_start]test_type: 'linear'       # Valid options: linear, constant, ramp, spike, custom [cite: 7, 33]
       [cite_start]users: '2'                # Passed as string to match workflow input type [cite: 34, 125]
       [cite_start]duration: '120'           # Passed as string to match workflow input type [cite: 35, 120]
