@@ -3,19 +3,19 @@ name: Trigger Performance Test on Push
 on:
   push:
     branches:
-      - [cite_start]main  # Runs whenever code is pushed to the main branch [cite: 20]
+      - main  # Runs whenever code is pushed to the main branch
 
 jobs:
   call-performance-test:
-    # Points to your existing performance testing workflow file [cite: 30]
+    # Points to your existing performance testing workflow file
     uses: ./.github/workflows/main.yml@main
     with:
-      [cite_start]project_name: 'pt55'      # Project name [cite: 32]
-      [cite_start]test_type: 'linear'       # Valid options: linear, constant, ramp, spike, custom [cite: 7, 33]
-      [cite_start]users: '2'                # Passed as string to match workflow input type [cite: 34, 125]
-      [cite_start]duration: '120'           # Passed as string to match workflow input type [cite: 35, 120]
+      project_name: 'pt55'      # Project name from your manual run
+      test_type: 'linear'       # Test profile type
+      users: '2'                # Number of users (must be a string in quotes)
+      duration: '120'           # Test duration (must be a string in quotes)
     secrets:
-      # These secrets must be defined in your GitHub Repository Settings [cite: 9, 36]
+      # Secrets passed to the main workflow for API access
       PERF_API_URL: ${{ secrets.PERF_API_URL }}
       PERF_USERNAME: ${{ secrets.PERF_USERNAME }}
       PERF_PASSWORD: ${{ secrets.PERF_PASSWORD }}
