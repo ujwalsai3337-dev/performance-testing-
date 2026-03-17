@@ -10,7 +10,7 @@ jobs:
     # Points to your existing performance testing workflow file
     uses: ./.github/workflows/main.yml
     with:
-      project_name: 'pt55'      # Project name from your manual run
+      project_name: 'pt-21'      # Project name from your manual run
       test_type: 'linear'       # Test profile type
       users: '2'                # Number of users (must be a string in quotes)
       duration: '120'           # Test duration (must be a string in quotes)
