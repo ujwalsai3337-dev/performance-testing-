@@ -61,6 +61,7 @@ class Library:
         self.books.append(book)
         # print(f"Added: {book.title}")
         print("hi")
+        print("new")
         # print("j")
         # print("hi")
         # print("hi")
