@@ -122,7 +122,7 @@ jobs:
       run: |
         echo "🔐 Authenticating with Performance Testing API..."
         # Login to get session cookie
-        curl -s -X POST "${PERF_API_URL}" \
+        curl -s -X POST "${PERF_API_URL}/login" \
           -H "Content-Type: application/json" \
           -d "{\"username\":\"${PERF_USERNAME}\",\"password\":\"${PERF_PASSWORD}\"}" \
           --cookie-jar cookies.txt \
