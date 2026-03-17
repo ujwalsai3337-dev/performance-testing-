@@ -27,6 +27,7 @@ class DatabaseConnection:
         print("Closing the internal data store connection.")
         if exc_type:
             print(f"Error encountered: {exc_val}")
+            print("hi")
         return False
 
 # --- 2. MODELS ---
@@ -224,3 +225,4 @@ def advanced_filter(data: List[Dict], criteria: Dict) -> List[Dict]:
     return filtered
 
 # End of script.
+print("end")
