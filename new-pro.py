@@ -224,6 +224,8 @@ def advanced_filter(data: List[Dict], criteria: Dict) -> List[Dict]:
             filtered.append(item)
     return filtered
 
+
+print("changed")
 # End of script.
 print("change")
 print("end")
