@@ -192,7 +192,7 @@ jobs:
         fi
         
         # Trigger the test
-        RESPONSE=$(curl -s -X POST "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/execute-with-params" \
+        RESPONSE=$(curl -s -X POST "${PERF_API_URL}/api/project/${PROJECT_NAME}/execute-with-params" \
           -H "Content-Type: application/json" \
           -H "Cookie: ${{ steps.auth.outputs.session_cookie }}" \
           -d "$JSON_PAYLOAD")
