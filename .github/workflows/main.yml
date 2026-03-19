@@ -123,8 +123,8 @@ jobs:
         echo "🔐 Authenticating with Performance Testing API..."
         # Login to get session cookie
         curl -s -X POST "https://performance-framework.tools.fulcrum-sre.com/tcloud/login" \
-          -H "Content-Type: application/json" \
-          -d "{\"username\":\"${PERF_USERNAME}\",\"password\":\"${PERF_PASSWORD}\"}" \
+           -H "Content-Type: application/json" \
+           -d "{\"username\":\"${PERF_USERNAME}\",\"password\":\"${PERF_PASSWORD}\"}"
           --cookie-jar cookies.txt \
           --location > /dev/null
         # Extract session cookie from Netscape cookie format
