@@ -227,6 +227,7 @@ def advanced_filter(data: List[Dict], criteria: Dict) -> List[Dict]:
 
 print("hi there iam ")
 print("not up")
+print("workk")
 print("changed")
 # End of script.
 print("change")
