@@ -124,7 +124,7 @@ jobs:
         # Login to get session cookie
         curl -s -X POST "https://performance-framework.tools.fulcrum-sre.com/tcloud/login" \
          -H "Content-Type: application/json" \
-         -d "{\"username\":\"ujwalsai_meduri@trimble.com\",\"password\":\"Govinda@123\"}" \
+         -d "{\"email\":\"ujwalsai_meduri@trimble.com\",\"password\":\"Govinda@123\"}" \
          --cookie-jar cookies.txt \
          --location > /dev/null
         # Extract session cookie from Netscape cookie format
