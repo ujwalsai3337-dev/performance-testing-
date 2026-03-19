@@ -234,7 +234,7 @@ jobs:
         while [ $WAIT_TIME -lt $MAX_WAIT_TIME ]; do
           echo "Checking status... (${WAIT_TIME}s elapsed)"
           # Check execution status (single-region uses project-based endpoint)
-          STATUS_RESPONSE=$(curl -s "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/execution-status" \
+          STATUS_RESPONSE=$(curl -s "${PERF_API_URL}/api/project/${PROJECT_NAME}/execution-status" \
             -H "Cookie: ${{ steps.auth.outputs.session_cookie }}")
           echo "🔍 Raw Status Response: $STATUS_RESPONSE"
           
@@ -277,7 +277,7 @@ jobs:
 
         # Get list of available reports
         echo "📋 Getting list of available reports..."
-        REPORTS_RESPONSE=$(curl -s "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/reports" \
+        REPORTS_RESPONSE=$(curl -s "${PERF_API_URL}/api/project/${PROJECT_NAME}/reports" \
           -H "Cookie: ${{ steps.auth.outputs.session_cookie }}")
 
         # Extract the latest report ID
@@ -293,7 +293,7 @@ jobs:
         echo "📥 Downloading report: $LATEST_REPORT_ID"
 
         # Download the report as zip
-        curl -s "${PERF_API_URL}/v2/api/project/${PROJECT_NAME}/report/${LATEST_REPORT_ID}/download" \
+        curl -s "${PERF_API_URL}/api/project/${PROJECT_NAME}/report/${LATEST_REPORT_ID}/download" \
           -H "Cookie: ${{ steps.auth.outputs.session_cookie }}" \
           --output test-results/report.zip
 
