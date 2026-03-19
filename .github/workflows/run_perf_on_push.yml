@@ -16,6 +16,6 @@ jobs:
       duration: '120'           # Test duration (must be a string in quotes)
     secrets:
       # Secrets passed to the main workflow for API access
-      # PERF_API_URL: ${{ secrets.PERF_API_URL }}
+      PERF_API_URL: ${{ secrets.PERF_API_URL }}
       PERF_USERNAME: ${{ secrets.PERF_USERNAME }}
       PERF_PASSWORD: ${{ secrets.PERF_PASSWORD }}
